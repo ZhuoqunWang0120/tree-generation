@@ -4,7 +4,6 @@ import sys
 sys.path.append('/hpc/home/zw122/tree_condsamp/LACE/tree-toy/')
 sys.path.append('/hpc/home/zw122/tree_condsamp/boostPM_py')
 import sampling
-import importlib
 import torch
 import boostPM_py
 import matplotlib.pyplot as plt
@@ -31,6 +30,7 @@ beta_1 = args.beta_1
 rtol = args.rtol
 atol = args.atol
 prefix = "ode_gaussian" + "_nsamp_" + str(nsamp) + "_beta_0_" + str(beta_0) + "_beta_1_" + str(beta_1) + "_rtol_" + str(args.rtol) + "_atol_" + str(args.atol) + "_" + args.ode_method + "_T_" + str(args.ode_T) + "_"
+prefix = 'NEW' + prefix
 print('/work/zw122/tree_condsamp/LACE/tree-toy/cache/'+prefix+'temp_s.pdf', flush=True)
 path = '/work/zw122/tree_condsamp/LACE/tree-toy/cache/'+prefix+'temp_gs.pkl'
 if os.path.exists(path):
@@ -51,7 +51,7 @@ Xtrain[(c==0).flatten(),:] = (torch.randn(n, d_g) + 8.).double() @ torch.tensor(
 Xtrain = Xtrain.double()
 #-------generator---------
 out = boostPM_py.boosting(Xtrain)
-robj.r('saveRDS')(out, '/hpc/home/zw122/tree_condsamp/LACE/tree-toy/pretrained/out.rds')
+# robj.r('saveRDS')(out, '/hpc/home/zw122/tree_condsamp/LACE/tree-toy/pretrained/out.rds')
 
 # %%
 # plt.scatter(Xtrain[(c==0).flatten(),0],Xtrain[(c==0).flatten(),1], label = 'Xtrain (0)', alpha = 0.2)
@@ -122,7 +122,7 @@ with torch.no_grad():
 
 
 # %%
-ccf = sampling.CCF(x_space="toy_i", latent_dim = d_g, n_classes = 2)
+ccf = sampling.CCF(x_space="toy_i", boosting_list=out, latent_dim = d_g, n_classes = 2)
 ccf.f = model
 sample_q = sampling._sample_q_dict['sample_q_ode']
 ode_kwargs = {'every_n_plot': 100, 'save_path': True, 'batch_size': 500, 'latent_dim': d_g, 'rtol': rtol, 'atol': atol, 'device': torch.device('cpu'), 'method': args.ode_method, 'use_adjoint': False, 'beta_0':beta_0, 'beta_1':beta_1, 'T':args.ode_T}

@@ -6,42 +6,27 @@
 # ---------------------------------------------------------------
 
 import sys
-sys.path.append('boostPM_py')
+sys.path.append('/hpc/home/zw122/tree_condsamp/boostPM_py')
 import torch
 import torch.nn as nn
 import boostPM_py
-import rpy2.robjects as robj
 from torchdiffeq import odeint_adjoint
 from torchdiffeq import odeint as odeint_normal
 
-
-# from torchdiffeq import odeint_adjoint
-# from torchdiffeq import odeint as odeint_normal
-
-# import dnnlib, legacy
-# from latent_model import DenseEmbedder
-# from models import DenseNet
-# from models import WideResNet
-# from utils import torch2rmat
-
-# NETWORK_PKL = 'https://nvlabs-fi-cdn.nvidia.com/stylegan2-ada-pytorch/pretrained/paper-fig11b-cifar10/cifar10u-cifar-ada-best-fid.pkl'
 normal_dist = torch.distributions.normal.Normal(0., 1.)
-readRDS = robj.r['readRDS']
-g_path = '/hpc/home/zw122/tree_condsamp/LACE/tree-toy/pretrained/gaussianout.rds'
-out = readRDS(g_path)
-
 
 class F(nn.Module):
-    def __init__(self, x_space, latent_dim, n_classes):
+    def __init__(self, x_space, boosting_list, latent_dim, n_classes):
         # self.f: classifier, g(z) -> logits
         # self.g: pre-trained generator, a mapping z->g(z) or z->w or g->g
 
         super(F, self).__init__()
         self.x_space = x_space
+        self.boosting_list = boosting_list
 
         if x_space == 'toy_i':
             def mapping_z_to_i(z):
-                gz = boostPM_py.generator(out, z)
+                gz = boostPM_py.generator(boosting_list, z)
                 gz.requires_grad = True
                 return gz
             self.g = mapping_z_to_i
@@ -70,10 +55,11 @@ class F(nn.Module):
 
 
 class CCF(F):
-    def __init__(self, x_space, latent_dim, n_classes):
-        super(CCF, self).__init__(x_space, latent_dim=latent_dim, n_classes = n_classes)
+    def __init__(self, x_space, boosting_list, latent_dim, n_classes):
+        super(CCF, self).__init__(x_space, boosting_list, latent_dim=latent_dim, n_classes = n_classes)
 
         self.x_space = x_space
+        self.boosting_list = boosting_list
         self.d = {}
         print(f'Working in the x_space: {x_space}')
     def classify_with_gz(self, z):
@@ -126,7 +112,7 @@ def sample_q_sgld(ccf, y, device, save_path=None, plot=None, every_n_plot=5, **k
         gz = ccf.d['gz']
         dE_dg = torch.autograd.grad(energy_neg.sum(), [gz])[0]
         z_k.requires_grad = False
-        diag_log_jac = boostPM_py.diag_log_dg_dz(out, z_k)
+        diag_log_jac = boostPM_py.diag_log_dg_dz(ccf.boosting_list, z_k)
         assert dE_dg.shape == diag_log_jac.shape
         diag_dg_dz = torch.exp(diag_log_jac)
         f_prime = dE_dg * diag_dg_dz - z_k# element wise
@@ -152,6 +138,7 @@ class VPODE(nn.Module):
         self.n_evals = 0
         self.every_n_plot = every_n_plot
         self.plot = plot
+        self.boosting_list = ccf.boosting_list
 
     def forward(self, t_k, states):
         z = states[0]
@@ -173,7 +160,7 @@ class VPODE(nn.Module):
         gz = self.ccf.d['gz']
         dE_dg = torch.autograd.grad(cond_energy_neg.sum(), [gz])[0]
         # z.requires_grad = False
-        diag_log_jac = boostPM_py.diag_log_dg_dz(out, z.detach())
+        diag_log_jac = boostPM_py.diag_log_dg_dz(self.boosting_list, z.detach())
         assert dE_dg.shape == diag_log_jac.shape
         diag_dg_dz = torch.exp(diag_log_jac)
         cond_f_prime = dE_dg * diag_dg_dz 
